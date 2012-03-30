@@ -46,7 +46,4 @@ setup(name='metlog-psutils',
           'nose',
           'mock',
           ],
-      entry_points={
-          'metlog.plugin': ['procinfo=metlog_psutils.psutil_plugin:config_plugin'],
-          }
       )

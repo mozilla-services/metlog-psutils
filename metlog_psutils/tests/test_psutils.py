@@ -186,6 +186,7 @@ def test_plugins_config():
     sender_class = metlog.senders.DebugCaptureSender
 
     [metlog_plugin_procinfo]
+    provider=metlog_psutils.psutil_plugin:config_plugin
     net=True
     """
     from metlog.config import client_from_text_config
