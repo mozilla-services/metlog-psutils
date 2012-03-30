@@ -41,7 +41,6 @@ class LazyPSUtil(object):
     """
     This class can only be used *outside* the process that is being inspected
     """
-    POLL_INTERVAL = 1.0
 
     def __init__(self, pid):
         self.pid = pid
@@ -114,7 +113,7 @@ class LazyPSUtil(object):
             raise OSXPermissionFailure("OSX requires root for memory info")
 
         cputimes = self.process.get_cpu_times()
-        cpu_pcnt = self.process.get_cpu_percent(interval=self.POLL_INTERVAL)
+        cpu_pcnt = self.process.get_cpu_percent()
         return {'cpu_pcnt': cpu_pcnt,
                 'cpu_user': cputimes.user,
                 'cpu_sys': cputimes.system}
@@ -159,6 +158,7 @@ def process_details(pid=None, net=False, io=False,
     """
     if pid is None:
         pid = os.getpid()
+
     interp = sys.executable
     cmd = ['from metlog_psutils.psutil_plugin import LazyPSUtil',
            'LazyPSUtil(%(pid)d).write_json(net=%(net)s, io=%(io)s, cpu=%(cpu)s, mem=%(mem)s, threads=%(threads)s)']
