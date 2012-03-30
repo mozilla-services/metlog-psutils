@@ -64,6 +64,29 @@ class LazyPSUtil(object):
         return self._process
 
     def get_connections(self):
+        """
+        Return details of each network connection as a list of
+        dictionaries.
+
+        Keys in each connection dictionary are:
+
+            local - host:port for the local side of the connection
+
+            remote - host:port of the remote side of the connection
+
+            status - TCP Connection status. One of :
+                * "ESTABLISHED"
+                * "SYN_SENT"
+                * "SYN_RECV"
+                * "FIN_WAIT1"
+                * "FIN_WAIT2"
+                * "TIME_WAIT"
+                * "CLOSE"
+                * "CLOSE_WAIT"
+                * "LAST_ACK"
+                * "LISTEN"
+                * "CLOSING"
+        """
         connections = []
         for conn in self.process.get_connections():
             if conn.type == socket.SOCK_STREAM:
@@ -86,6 +109,10 @@ class LazyPSUtil(object):
         return connections
 
     def get_io_counters(self):
+        """
+        Return the number of bytes read, written and the number of
+        read and write syscalls that have invoked.
+        """
         if not supports_iocounters():
             sys.exit('platform not supported')
 
@@ -98,17 +125,28 @@ class LazyPSUtil(object):
                 }
 
     def get_memory_info(self):
+        """
+        Return the percentage of physical memory used, RSS and VMS
+        memory used
+        """
         if not check_osx_perm():
             raise OSXPermissionFailure("OSX requires root for memory info")
 
-        cputimes = self.process.get_cpu_times()
         meminfo = self.process.get_memory_info()
         mem_details = {'pcnt': self.process.get_memory_percent(),
                 'rss': meminfo.rss,
-                'vms': cputimes.system}
+                'vms': meminfo.vms,
+                }
         return mem_details
 
     def get_cpu_info(self):
+        """
+        Return CPU usages in seconds split by system and user for the
+        whole process.  Also provides CPU % used for a 0.1 second
+        interval.
+
+        Note that this method will *block* for 0.1 seconds.
+        """
         if not check_osx_perm():
             raise OSXPermissionFailure("OSX requires root for memory info")
 
@@ -119,6 +157,10 @@ class LazyPSUtil(object):
                 'cpu_sys': cputimes.system}
 
     def get_thread_cpuinfo(self):
+        """
+        Return CPU usages in seconds split by system and user on a
+        per thread basis.
+        """
         if not check_osx_perm():
             raise OSXPermissionFailure("OSX requires root for memory info")
 
