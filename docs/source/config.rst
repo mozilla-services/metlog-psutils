@@ -55,4 +55,33 @@ with network messages disabled is illustrated below. ::
 Metlog fields
 =============
 
+The plugin will only send the process details that you explicitly
+ask for. These details are formatted as JSON blobs where each detail
+type is keyed by name. The following datastructure shows a typical
+blob if all options are enabled. ::
 
+    {u'net': [{u'local': u'127.0.0.1:50007',
+               u'remote': u'*:*',
+               u'status': u'LISTEN',
+               u'type': u'TCP'},
+              {u'local': u'127.0.0.1:50008',
+               u'remote': u'*:*',
+               u'status': u'LISTEN',
+               u'type': u'TCP'}],
+     u'cpu': {u'cpu_pcnt': 0.0,
+              u'cpu_sys': 0.05, 
+              u'cpu_user': 0.1},
+     u'io': {u'read_bytes': 0,
+             u'read_count': 4421519,
+             u'write_bytes': 0,
+             u'write_count': 9320},
+     u'mem': {u'pcnt': 2.206379931699794,
+              u'rss': 11485184,
+              u'vms': 0.05},
+     u'threads': {u'9047': {u'sys': 0.05, u'user': 0.1},
+                  u'9048': {u'sys': 0.0, u'user': 0.0},
+                  u'9049': {u'sys': 0.0, u'user': 0.0},
+                  u'9055': {u'sys': 0.0, u'user': 0.0}}
+    }
+
+TODO: need more details on how to interpet each number.
