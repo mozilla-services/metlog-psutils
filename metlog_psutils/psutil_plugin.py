@@ -59,7 +59,7 @@ class LazyPSUtil(object):
     def process(self):
         if self._process is None:
             self._process = psutil.Process(self.pid)
-            if os.getpid() == self.pid:
+            if 'darwin' in sys.platform and os.getpid() == self.pid:
                 raise InvalidPIDError("Can't run process inspection on itself")
         return self._process
 
@@ -128,7 +128,8 @@ class LazyPSUtil(object):
                     'user': thread.user_time}
         return thread_details
 
-    def write_json(self, net=False, io=False, cpu=False, mem=False, threads=False):
+    def write_json(self, net=False, io=False, cpu=False, mem=False, threads=False, 
+        output_stdout=True):
         data = {}
 
         if net:
@@ -146,8 +147,11 @@ class LazyPSUtil(object):
         if threads:
             data['threads'] = self.get_thread_cpuinfo()
 
-        sys.stdout.write(json.dumps(data))
-        sys.stdout.flush()
+        if output_stdout:
+            sys.stdout.write(json.dumps(data))
+            sys.stdout.flush()
+        else:
+            return data
 
 
 def process_details(pid=None, net=False, io=False,
@@ -159,6 +163,20 @@ def process_details(pid=None, net=False, io=False,
     if pid is None:
         pid = os.getpid()
 
+    if 'darwin' in sys.platform:
+        return _popen_process_details(pid, net, io, cpu, mem, threads)
+    else:
+        return _inproc_process_details(pid, net, io, cpu, mem, threads)
+
+def _inproc_process_details(pid=None, net=False, io=False,
+                    cpu=False, mem=False, threads=False):
+    interp = sys.executable
+    lp = LazyPSUtil(pid)
+    data = lp.write_json(net, io, cpu, mem, threads, output_stdout=False)
+    return data
+
+def _popen_process_details(pid=None, net=False, io=False,
+                    cpu=False, mem=False, threads=False):
     interp = sys.executable
     cmd = ['from metlog_psutils.psutil_plugin import LazyPSUtil',
            'LazyPSUtil(%(pid)d).write_json(net=%(net)s, io=%(io)s, cpu=%(cpu)s, mem=%(mem)s, threads=%(threads)s)']
