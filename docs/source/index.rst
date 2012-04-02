@@ -10,6 +10,7 @@
    :glob:
 
    *
+   api/*
 
 Indices and tables
 ==================
