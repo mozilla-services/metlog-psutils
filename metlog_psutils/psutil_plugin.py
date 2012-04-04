@@ -168,15 +168,30 @@ class LazyPSUtil(object):
         Return the percentage of physical memory used, RSS and VMS
         memory used
         """
+        # TODO: move this out into the constructor and just delete the
+        # method instead of checking it each time
         if not check_osx_perm():
             raise OSXPermissionFailure("OSX requires root for memory info")
 
         meminfo = self.process.get_memory_info()
-        mem_details = {'pcnt': self.process.get_memory_percent(),
-                'rss': meminfo.rss,
-                'vms': meminfo.vms,
-                }
-        return mem_details
+        statsd_msgs = []
+        statsd_msgs.append({'ns': 'psutil_meminfo',
+                            'key': 'pcnt', 
+                            'value': self.process.get_memory_percent(),
+                            'rate': '',
+                            })
+        statsd_msgs.append({'ns': 'psutil_meminfo',
+                            'key': 'rss', 
+                            'value': meminfo.rss,
+                            'rate': '',
+                            })
+        statsd_msgs.append({'ns': 'psutil_meminfo',
+                            'key': 'vms', 
+                            'value': meminfo.vms,
+                            'rate': '',
+                            })
+        return statsd_msgs
+
 
     def get_cpu_info(self):
         """

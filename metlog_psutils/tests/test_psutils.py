@@ -98,7 +98,6 @@ class TestProcessLogs(TestCase):
         found_rc = False
         found_wc = False
         for statsd in detail['io']:
-
             # Check the structure
             assert len(statsd) == 4
             assert 'key' in statsd
@@ -124,10 +123,26 @@ class TestProcessLogs(TestCase):
         if not check_osx_perm():
             self.skipTest("OSX needs root")
 
+        found_pcnt = False
+        found_rss = False
+        found_vms = False
         detail = process_details(mem=True)
-        assert 'pcnt' in detail['mem']
-        assert 'rss' in detail['mem']
-        assert 'vms' in detail['mem']
+        for statsd in detail['mem']:
+            eq_(len(statsd), 4)
+            assert statsd['ns'] == 'psutil_meminfo'
+            assert 'key' in statsd
+            assert isinstance(statsd['key'], basestring)
+            assert 'value' in statsd
+            assert isinstance(statsd['value'], float) or isinstance(statsd['value'], int)
+            assert 'rate' in statsd
+            eq_(statsd['rate'], '')
+
+            if statsd['key'] == 'pcnt':
+                found_pcnt = True
+            if statsd['key'] == 'rss':
+                found_rss = True
+            if statsd['key'] == 'vms':
+                found_vms = True
 
     def test_invalid_metlog_arg(self):
         with self.assertRaises(SyntaxError):
