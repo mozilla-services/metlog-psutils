@@ -31,6 +31,8 @@ from mock import Mock
 from metlog.client import MetlogClient
 import pkg_resources
 
+from testbase import wait_for_network_shutdown
+
 class TestProcessLogs(TestCase):
 
     def test_connections(self):
@@ -61,7 +63,8 @@ class TestProcessLogs(TestCase):
             client.close()
             time.sleep(1)
 
-        details = process_details(net=True)
+        details = process_details(net=True,
+                                  server_addr=['%s:%s' % (HOST, PORT)])
         eq_(len(details['net']), 1)
 
         # Start the client up just so that the server will die gracefully
@@ -89,10 +92,33 @@ class TestProcessLogs(TestCase):
             self.skipTest("No IO counter support on this platform")
 
         detail = process_details(io=True)
-        assert 'read_bytes' in detail['io']
-        assert 'write_bytes' in detail['io']
-        assert 'read_count' in detail['io']
-        assert 'write_count' in detail['io']
+
+        found_rb = False
+        found_wb = False
+        found_rc = False
+        found_wc = False
+        for statsd in detail['io']:
+
+            # Check the structure
+            assert len(statsd) == 4
+            assert 'key' in statsd
+            assert isinstance(statsd['key'], basestring)
+            assert 'ns' in statsd
+            assert isinstance(statsd['ns'], basestring)
+            assert 'value' in statsd
+            assert isinstance(statsd['value'], type(1))
+            assert 'rate' in statsd
+            eq_(statsd['rate'], '')
+
+            if statsd['key'] == 'read_bytes':
+                found_rb = True
+            if statsd['key'] == 'write_bytes':
+                found_wb = True
+            if statsd['key'] == 'read_count':
+                found_rc = True
+            if statsd['key'] == 'write_count':
+                found_wc = True
+        assert found_wc and found_rc and found_wb and found_rb
 
     def test_meminfo(self):
         if not check_osx_perm():
@@ -119,6 +145,8 @@ class TestMetlog(object):
 
         plugin = config_plugin({'net':True})
         self.client.add_method('procinfo', plugin)
+
+        wait_for_network_shutdown()
 
     def test_add_procinfo(self):
         HOST = 'localhost'                 # Symbolic name meaning the local host
@@ -148,10 +176,13 @@ class TestMetlog(object):
             client.close()
             time.sleep(1)
 
-        self.client.procinfo(net=True)
+        self.client.procinfo(net=True, server_addr='localhost:50017')
         eq_(1, len(self.client.sender.method_calls))
         fields = self.client.sender.method_calls[0][1][0]['fields']
-        assert fields == {u'net': [{u'status': u'LISTEN', u'type': u'TCP', u'local': u'127.0.0.1:50017', u'remote': u'*:*'}]}
+        eq_(fields,  {'net': [{'rate': 1, 
+                               'ns': '127.0.0.1:50017', 
+                               'value': 1,
+                               'key': 'LISTEN'}]})
 
         # Start the client up just so that the server will die gracefully
         tc = threading.Thread(target=client_code)
@@ -174,6 +205,8 @@ class TestConfiguration(object):
 
         plugin = config_plugin({'net':False})
         self.client.add_method('procinfo', plugin)
+
+        wait_for_network_shutdown()
 
     def test_no_netlogging(self):
         self.client.procinfo(net=True)

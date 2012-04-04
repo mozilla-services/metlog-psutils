@@ -11,6 +11,8 @@ import json
 import os
 import sys
 from subprocess import Popen, PIPE
+import re
+import socket
 
 
 class InvalidPIDError(StandardError):
@@ -42,9 +44,26 @@ class LazyPSUtil(object):
     This class can only be used *outside* the process that is being inspected
     """
 
-    def __init__(self, pid):
+    def __init__(self, pid, server_addr=None):
+        """
+        :param pid: Process ID to monitor
+        :param server_addr: A list of local host:port numbers that are
+                             server sockets. Defaults None.
+        """
         self.pid = pid
         self._process = None
+        if server_addr is None:
+            server_addr = []
+        if isinstance(server_addr, basestring):
+            server_addr = [server_addr]
+
+        # Force all addresses to use IP instead of hostname
+        for idx, addr in enumerate(server_addr):
+            host, port = addr.split(":")
+            if re.match('[a-z]', host, re.I):
+                server_addr[idx] = "%s:%s" % (socket.gethostbyname(host), port)
+
+        self._server_addr = server_addr
 
         # Delete any methods that we don't support on the current platform
         if not supports_iocounters():
@@ -118,11 +137,31 @@ class LazyPSUtil(object):
 
         io = self.process.get_io_counters()
 
-        return {'read_bytes': io.read_bytes,
-                'write_bytes': io.write_bytes,
-                'read_count': io.read_count,
-                'write_count': io.write_count,
-                }
+
+        statsd_msgs = []
+        statsd_msgs.append({'ns': 'psutil_iocount',
+                            'key': 'read_bytes', 
+                            'value': io.read_bytes,
+                            'rate': '',
+                            })
+        statsd_msgs.append({'ns': 'psutil_iocount',
+                            'key': 'write_bytes', 
+                            'value': io.write_bytes,
+                            'rate': '',
+                            })
+        statsd_msgs.append({'ns': 'psutil_iocount',
+                            'key': 'read_count', 
+                            'value': io.read_count,
+                            'rate': '',
+                            })
+        statsd_msgs.append({'ns': 'psutil_iocount',
+                            'key': 'write_count', 
+                            'value': io.read_count,
+                            'rate': '',
+                            })
+
+        return statsd_msgs
+
 
     def get_memory_info(self):
         """
@@ -170,12 +209,80 @@ class LazyPSUtil(object):
                     'user': thread.user_time}
         return thread_details
 
+    def _add_port(self, server_stats, server_port):
+        if not server_stats.has_key(server_port):
+            server_stats[server_port] = {
+                "ESTABLISHED": 0,
+                "SYN_SENT": 0,
+                "SYN_RECV": 0,
+                "FIN_WAIT1": 0,
+                "FIN_WAIT2": 0,
+                "TIME_WAIT": 0,
+                "CLOSE": 0,
+                "CLOSE_WAIT": 0,
+                "LAST_ACK": 0,
+                "LISTEN": 0,
+                "CLOSING": 0}
+
+    def summarize_network(self, network_data):
+        """
+        Summarizes network connection information into something that
+        is friendly to statsd.
+
+        From a metrics standpoint, we only really care about the
+        number of connections in each state.
+
+        Connections are sorted into 2 buckets
+            * server connections
+
+            For each listening host:port, a dictionary of connection
+            states to connection counts is created
+        """
+
+        server_stats = {}
+        for server_port in self._server_addr:
+            self._add_port(server_stats, server_port)
+
+        # TODO: sort the network connections and scan for '*.*' on
+        # remote host
+
+        for conn in network_data:
+            status = conn['status']
+            local_addr = conn['local']
+            remote_addr = conn['remote']
+
+            if remote_addr == '*:*' and local_addr not in self._server_addr:
+                sys.stderr.write("WARNING: missing a local address for server port in logging module")
+                self._server_addr.append(local_addr)
+                self._add_port(server_stats, local_addr)
+
+            if local_addr in self._server_addr:
+                server_stats[local_addr][status] += 1
+            else:
+                self._add_port(server_stats, remote_addr)
+                server_stats[remote_addr][status] += 1
+
+        # TODO: roll up stats into statsd style messages
+        # formatted as:
+        # client_or_server_port|remote_host:port|con_status|count
+        statsd_msgs = []
+        for addr, status_dict in server_stats.items():
+            for status_name, conn_count in status_dict.items():
+                if conn_count == 0:
+                    continue
+                statsd_msgs.append({'ns': 'psutil_net.%s' % (addr),
+                                    'key': status_name, 
+                                    'value': conn_count,
+                                    'rate': 1,
+                                    })
+        return statsd_msgs
+
     def write_json(self, net=False, io=False, cpu=False, mem=False, threads=False, 
         output_stdout=True):
         data = {}
 
         if net:
-            data['net'] = self.get_connections()
+            data['net'] = self.summarize_network(self.get_connections())
 
         if io:
             data['io'] = self.get_io_counters()
@@ -197,7 +304,8 @@ class LazyPSUtil(object):
 
 
 def process_details(pid=None, net=False, io=False,
-                    cpu=False, mem=False, threads=False):
+                    cpu=False, mem=False, threads=False,
+                    server_addr=None):
     """
     psutils doesn't work on it's own process.  Run psutils through a subprocess
     so that we don't have to deal with the process issues
@@ -206,24 +314,29 @@ def process_details(pid=None, net=False, io=False,
         pid = os.getpid()
 
     if 'darwin' in sys.platform:
-        return _popen_process_details(pid, net, io, cpu, mem, threads)
+        return _popen_process_details(pid, net, io, cpu, mem, threads,
+                server_addr)
     else:
-        return _inproc_process_details(pid, net, io, cpu, mem, threads)
+        return _inproc_process_details(pid, net, io, cpu, mem,
+                threads, server_addr)
 
 def _inproc_process_details(pid=None, net=False, io=False,
-                    cpu=False, mem=False, threads=False):
+                    cpu=False, mem=False, threads=False,
+                    server_addr=None):
     interp = sys.executable
-    lp = LazyPSUtil(pid)
+    lp = LazyPSUtil(pid, server_addr)
     data = lp.write_json(net, io, cpu, mem, threads, output_stdout=False)
     return data
 
 def _popen_process_details(pid=None, net=False, io=False,
-                    cpu=False, mem=False, threads=False):
+                    cpu=False, mem=False, threads=False,
+                    server_addr=None):
     interp = sys.executable
     cmd = ['from metlog_psutils.psutil_plugin import LazyPSUtil',
-           'LazyPSUtil(%(pid)d).write_json(net=%(net)s, io=%(io)s, cpu=%(cpu)s, mem=%(mem)s, threads=%(threads)s)']
+           'LazyPSUtil(%(pid)d, %(server_addr)r).write_json(net=%(net)s, io=%(io)s, cpu=%(cpu)s, mem=%(mem)s, threads=%(threads)s)']
     cmd = ';'.join(cmd)
     rdict = {'pid': pid,
+            'server_addr': server_addr,
             'net': int(net),
             'io': int(io),
             'cpu': int(cpu),
@@ -245,12 +358,14 @@ def config_plugin(config):
     config_cpu = config.pop('cpu', False)
     config_mem = config.pop('mem', False)
     config_threads = config.pop('threads', False)
+    default_server_addr = config.pop('server_addr', None)
 
     if config:
         raise SyntaxError('Invalid arguments: %s' % str(config))
 
     def metlog_procinfo(self, pid=None, net=False, io=False,
-            cpu=False, mem=False, threads=False):
+            cpu=False, mem=False, threads=False,
+            server_addr=default_server_addr):
         '''
         This is a metlog extension method to place process data into the metlog
         fields dictionary
@@ -271,7 +386,12 @@ def config_plugin(config):
                 io and config_io,
                 cpu and config_cpu, 
                 mem and config_mem, 
-                threads and config_threads)
+                threads and config_threads,
+                server_addr)
+
+        # TODO: rework this to format all fields into messages
+        # that can be used by the metlog_statsd output plugin for
+        # logstash
         self.metlog('procinfo', fields=fields)
 
     return metlog_procinfo
