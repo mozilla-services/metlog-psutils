@@ -270,7 +270,7 @@ class LazyPSUtil(object):
             for status_name, conn_count in status_dict.items():
                 if conn_count == 0:
                     continue
-                statsd_msgs.append({'ns': 'psutil_net.%s' % (addr),
+                statsd_msgs.append({'ns': 'psutil_net_%s' % (addr),
                                     'key': status_name, 
                                     'value': conn_count,
                                     'rate': 1,

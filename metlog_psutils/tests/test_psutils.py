@@ -180,7 +180,7 @@ class TestMetlog(object):
         eq_(1, len(self.client.sender.method_calls))
         fields = self.client.sender.method_calls[0][1][0]['fields']
         eq_(fields,  {'net': [{'rate': 1, 
-                               'ns': '127.0.0.1:50017', 
+                               'ns': 'psutil_net_127.0.0.1:50017', 
                                'value': 1,
                                'key': 'LISTEN'}]})
 
