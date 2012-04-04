@@ -138,22 +138,22 @@ class LazyPSUtil(object):
         io = self.process.get_io_counters()
 
         statsd_msgs = []
-        statsd_msgs.append({'ns': 'psutil#iocount',
+        statsd_msgs.append({'ns': 'psutil.io.count',
                             'key': 'read_bytes', 
                             'value': io.read_bytes,
                             'rate': '',
                             })
-        statsd_msgs.append({'ns': 'psutil#iocount',
+        statsd_msgs.append({'ns': 'psutil.io.count',
                             'key': 'write_bytes', 
                             'value': io.write_bytes,
                             'rate': '',
                             })
-        statsd_msgs.append({'ns': 'psutil#iocount',
+        statsd_msgs.append({'ns': 'psutil.iocount',
                             'key': 'read_count', 
                             'value': io.read_count,
                             'rate': '',
                             })
-        statsd_msgs.append({'ns': 'psutil#iocount',
+        statsd_msgs.append({'ns': 'psutil.iocount',
                             'key': 'write_count', 
                             'value': io.read_count,
                             'rate': '',
@@ -174,17 +174,17 @@ class LazyPSUtil(object):
 
         meminfo = self.process.get_memory_info()
         statsd_msgs = []
-        statsd_msgs.append({'ns': 'psutil#meminfo',
+        statsd_msgs.append({'ns': 'psutil.meminfo',
                             'key': 'pcnt', 
                             'value': self.process.get_memory_percent(),
                             'rate': '',
                             })
-        statsd_msgs.append({'ns': 'psutil#meminfo',
+        statsd_msgs.append({'ns': 'psutil.meminfo',
                             'key': 'rss', 
                             'value': meminfo.rss,
                             'rate': '',
                             })
-        statsd_msgs.append({'ns': 'psutil#meminfo',
+        statsd_msgs.append({'ns': 'psutil.meminfo',
                             'key': 'vms', 
                             'value': meminfo.vms,
                             'rate': '',
@@ -207,17 +207,17 @@ class LazyPSUtil(object):
         cpu_pcnt = self.process.get_cpu_percent()
 
         statsd_msgs = []
-        statsd_msgs.append({'ns': 'psutil#cpu',
+        statsd_msgs.append({'ns': 'psutil.cpu',
                             'key': 'user', 
                             'value': cputimes.user,
                             'rate': '',
                             })
-        statsd_msgs.append({'ns': 'psutil#cpu',
+        statsd_msgs.append({'ns': 'psutil.cpu',
                             'key': 'sys', 
                             'value': cputimes.system,
                             'rate': '',
                             })
-        statsd_msgs.append({'ns': 'psutil#cpu',
+        statsd_msgs.append({'ns': 'psutil.cpu',
                             'key': 'pcnt', 
                             'value': cpu_pcnt,
                             'rate': '',
@@ -235,12 +235,12 @@ class LazyPSUtil(object):
         statsd_msgs = []
 
         for thread in self.process.get_threads():
-            statsd_msgs.append({'ns': 'psutil#thread#%s' % thread.id,
+            statsd_msgs.append({'ns': 'psutil.thread.%s' % thread.id,
                                 'key': 'sys', 
                                 'value': thread.system_time,
                                 'rate': '',
                                 })
-            statsd_msgs.append({'ns': 'psutil#thread#%s' % thread.id,
+            statsd_msgs.append({'ns': 'psutil.thread.%s' % thread.id,
                                 'key': 'user', 
                                 'value': thread.user_time,
                                 'rate': '',
@@ -282,9 +282,6 @@ class LazyPSUtil(object):
         for server_port in self._server_addr:
             self._add_port(server_stats, server_port)
 
-        # TODO: sort the network connections and scan for '*.*' on
-        # remote host
-
         for conn in network_data:
             status = conn['status']
             local_addr = conn['local']
@@ -301,15 +298,12 @@ class LazyPSUtil(object):
                 self._add_port(server_stats, remote_addr)
                 server_stats[remote_addr][status] += 1
 
-        # TODO: roll up stats into statsd style messages
-        # formatted as:
-        # client_or_server_port|remote_host:port|con_status|count
         statsd_msgs = []
         for addr, status_dict in server_stats.items():
             for status_name, conn_count in status_dict.items():
                 if conn_count == 0:
                     continue
-                statsd_msgs.append({'ns': 'psutil#net#%s' % (addr),
+                statsd_msgs.append({'ns': 'psutil.net.%s' % addr.replace(".", '_'),
                                     'key': status_name, 
                                     'value': conn_count,
                                     'rate': 1,

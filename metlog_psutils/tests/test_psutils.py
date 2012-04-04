@@ -142,7 +142,7 @@ class TestProcessLogs(TestCase):
         detail = process_details(mem=True)
         for statsd in detail['mem']:
             eq_(len(statsd), 4)
-            assert statsd['ns'] == 'psutil#meminfo'
+            assert statsd['ns'] == 'psutil.meminfo'
             assert 'key' in statsd
             assert isinstance(statsd['key'], basestring)
             assert 'value' in statsd
@@ -208,7 +208,7 @@ class TestMetlog(object):
         eq_(1, len(self.client.sender.method_calls))
         fields = self.client.sender.method_calls[0][1][0]['fields']
         eq_(fields,  {'net': [{'rate': 1, 
-                               'ns': 'psutil#net#127.0.0.1:50017', 
+                               'ns': 'psutil.net.127_0_0_1:50017', 
                                'value': 1,
                                'key': 'LISTEN'}]})
 
