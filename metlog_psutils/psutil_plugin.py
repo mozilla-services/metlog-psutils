@@ -414,7 +414,7 @@ def config_plugin(config):
         if pid is None:
             pid = os.getpid()
 
-        fields = process_details(pid,
+        details = process_details(pid,
                 net and config_net,
                 io and config_io,
                 cpu and config_cpu, 
@@ -422,9 +422,14 @@ def config_plugin(config):
                 threads and config_threads,
                 server_addr)
 
-        # TODO: rework this to format all fields into messages
-        # that can be used by the metlog_statsd output plugin for
-        # logstash
-        self.metlog('procinfo', fields=fields)
+        # Send all the collected metlog messages over
+        for k, msgs in details.items():
+            for m in msgs:
+                self.metlog('procinfo', 
+                        fields={'logger': m['ns'],
+                                'name': m['key'],
+                                'rate': m['rate']},
+                        payload=m['value'])
+
 
     return metlog_procinfo

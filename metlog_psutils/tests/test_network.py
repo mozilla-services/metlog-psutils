@@ -19,7 +19,6 @@ We are initially interested in :
 
 from unittest2 import TestCase
 from metlog_psutils.psutil_plugin import process_details
-from metlog_psutils.psutil_plugin import config_plugin
 from metlog_psutils.psutil_plugin import check_osx_perm
 from metlog_psutils.psutil_plugin import supports_iocounters
 import time

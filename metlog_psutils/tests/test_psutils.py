@@ -24,6 +24,9 @@ from metlog_psutils.psutil_plugin import supports_iocounters
 from mock import Mock
 from nose.tools import eq_
 from testbase import wait_for_network_shutdown
+from metlog.config import client_from_text_config
+import json
+
 from unittest2 import TestCase
 import itertools
 import socket
@@ -165,15 +168,17 @@ class TestMetlog(object):
     logger = 'tests'
 
     def setUp(self):
-        self.mock_sender = Mock()
-        self.client = MetlogClient(self.mock_sender, self.logger)
-        # overwrite the class-wide threadlocal w/ an instance one
-        # so values won't persist btn tests
-        self.client.timer._local = threading.local()
 
-        plugin = config_plugin({'net':True})
-        self.client.add_method('procinfo', plugin)
+        cfg_txt = """
+        [metlog]
+        sender_class = metlog.senders.DebugCaptureSender
 
+        [metlog_plugin_procinfo]
+        provider=metlog_psutils.psutil_plugin:config_plugin
+        net=True
+        """
+        ###
+        self.client = client_from_text_config(cfg_txt, 'metlog')
         wait_for_network_shutdown()
 
     def test_add_procinfo(self):
@@ -205,13 +210,18 @@ class TestMetlog(object):
             time.sleep(1)
 
         self.client.procinfo(net=True, server_addr='localhost:50017')
-        eq_(1, len(self.client.sender.method_calls))
-        fields = self.client.sender.method_calls[0][1][0]['fields']
-        eq_(fields,  {'net': [{'rate': 1, 
-                               'ns': 'psutil.net.127_0_0_1:50017', 
-                               'value': 1,
-                               'key': 'LISTEN'}]})
 
+
+        msgs = list(self.client.sender.msgs)
+        eq_(len(msgs), 1)
+        msg = json.loads(msgs[0])
+        del msg['timestamp']
+        expected = {u'severity': 6, u'fields': {u'logger':
+            u'psutil.net.127_0_0_1:50017', u'name': u'LISTEN',
+            u'rate': 1}, u'logger': u'', u'type': u'procinfo',
+            u'payload': 1, u'env_version': u'0.8'}
+
+        eq_(expected, msg)
         # Start the client up just so that the server will die gracefully
         tc = threading.Thread(target=client_code)
         tc.start()
@@ -248,20 +258,22 @@ def test_plugins_config():
 
     [metlog_plugin_procinfo]
     provider=metlog_psutils.psutil_plugin:config_plugin
-    net=True
+    cpu=True
     """
     from metlog.config import client_from_text_config
     import json
 
     client = client_from_text_config(cfg_txt, 'metlog')
-    client.procinfo(net=True)
-    assert len(client.sender.msgs) == 1
-    actual = json.loads(client.sender.msgs[0])
-    del actual['timestamp']
-    expected = {"severity": 6, 
-     "fields": {"net": []}, 
-     "logger": "", 
-     "type": "procinfo", 
-     "payload": "",
-     "env_version": "0.8"}
-    assert actual == expected
+    client.procinfo(cpu=True)
+
+    eq_(len(client.sender.msgs), 3)
+    msgs = [json.loads(m) for m in client.sender.msgs]
+    for m in msgs:
+        del m['timestamp']
+
+    keys = set([m['fields']['name'] for m in msgs])
+    eq_(3, len(keys))
+    for m in msgs:
+        eq_(m['fields']['logger'], 'psutil.cpu')
+        assert m['fields']['name'] in ('user', 'sys', 'pcnt')
+        assert isinstance(m['payload'], float)
