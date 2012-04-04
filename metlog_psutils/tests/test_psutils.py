@@ -16,22 +16,19 @@ We are initially interested in :
     * memory utilization.
 """
 
-
-from unittest2 import TestCase
-from metlog_psutils.psutil_plugin import process_details
-from metlog_psutils.psutil_plugin import config_plugin
+from metlog.client import MetlogClient
 from metlog_psutils.psutil_plugin import check_osx_perm
+from metlog_psutils.psutil_plugin import config_plugin
+from metlog_psutils.psutil_plugin import process_details
 from metlog_psutils.psutil_plugin import supports_iocounters
-import time
+from mock import Mock
+from nose.tools import eq_
+from testbase import wait_for_network_shutdown
+from unittest2 import TestCase
+import itertools
 import socket
 import threading
-from nose.tools import eq_
-
-from mock import Mock
-from metlog.client import MetlogClient
-import pkg_resources
-
-from testbase import wait_for_network_shutdown
+import time
 
 class TestProcessLogs(TestCase):
 
@@ -75,17 +72,33 @@ class TestProcessLogs(TestCase):
         if not check_osx_perm():
             self.skipTest("OSX needs root")
         detail = process_details(cpu=True)
-        assert 'cpu_pcnt' in detail['cpu']
-        assert 'cpu_sys' in detail['cpu']
-        assert 'cpu_user' in detail['cpu']
+
+        found_pcnt= False
+        found_sys= False
+        found_user= False
+        for statsd in detail['cpu']:
+            if statsd['key'] == 'pcnt':
+                found_pcnt = True
+            if statsd['key'] == 'sys':
+                found_sys = True
+            if statsd['key'] == 'user':
+                found_user = True
+        assert found_pcnt and found_sys and found_user
 
     def test_thread_cpu_info(self):
         if not check_osx_perm():
             self.skipTest("OSX needs root")
         detail = process_details(threads=True)
-        for thread_id, thread_data in detail['threads'].items():
-            assert 'sys' in thread_data
-            assert 'user' in thread_data
+
+        msgs = [statsd for statsd in detail['threads'] \
+                if statsd['key'] in ('sys', 'user')]
+
+        assert len(msgs) > 0
+        for k, g in itertools.groupby(msgs, lambda x: x['ns']):
+            g_list = list(g)
+            eq_(len(g_list), 2)
+            assert 'sys' in [f['key'] for f in g_list]
+            assert 'user' in [f['key'] for f in g_list]
 
     def test_io_counters(self):
         if not supports_iocounters():
@@ -129,7 +142,7 @@ class TestProcessLogs(TestCase):
         detail = process_details(mem=True)
         for statsd in detail['mem']:
             eq_(len(statsd), 4)
-            assert statsd['ns'] == 'psutil_meminfo'
+            assert statsd['ns'] == 'psutil#meminfo'
             assert 'key' in statsd
             assert isinstance(statsd['key'], basestring)
             assert 'value' in statsd
@@ -195,7 +208,7 @@ class TestMetlog(object):
         eq_(1, len(self.client.sender.method_calls))
         fields = self.client.sender.method_calls[0][1][0]['fields']
         eq_(fields,  {'net': [{'rate': 1, 
-                               'ns': 'psutil_net_127.0.0.1:50017', 
+                               'ns': 'psutil#net#127.0.0.1:50017', 
                                'value': 1,
                                'key': 'LISTEN'}]})
 

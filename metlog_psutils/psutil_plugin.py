@@ -137,24 +137,23 @@ class LazyPSUtil(object):
 
         io = self.process.get_io_counters()
 
-
         statsd_msgs = []
-        statsd_msgs.append({'ns': 'psutil_iocount',
+        statsd_msgs.append({'ns': 'psutil#iocount',
                             'key': 'read_bytes', 
                             'value': io.read_bytes,
                             'rate': '',
                             })
-        statsd_msgs.append({'ns': 'psutil_iocount',
+        statsd_msgs.append({'ns': 'psutil#iocount',
                             'key': 'write_bytes', 
                             'value': io.write_bytes,
                             'rate': '',
                             })
-        statsd_msgs.append({'ns': 'psutil_iocount',
+        statsd_msgs.append({'ns': 'psutil#iocount',
                             'key': 'read_count', 
                             'value': io.read_count,
                             'rate': '',
                             })
-        statsd_msgs.append({'ns': 'psutil_iocount',
+        statsd_msgs.append({'ns': 'psutil#iocount',
                             'key': 'write_count', 
                             'value': io.read_count,
                             'rate': '',
@@ -175,17 +174,17 @@ class LazyPSUtil(object):
 
         meminfo = self.process.get_memory_info()
         statsd_msgs = []
-        statsd_msgs.append({'ns': 'psutil_meminfo',
+        statsd_msgs.append({'ns': 'psutil#meminfo',
                             'key': 'pcnt', 
                             'value': self.process.get_memory_percent(),
                             'rate': '',
                             })
-        statsd_msgs.append({'ns': 'psutil_meminfo',
+        statsd_msgs.append({'ns': 'psutil#meminfo',
                             'key': 'rss', 
                             'value': meminfo.rss,
                             'rate': '',
                             })
-        statsd_msgs.append({'ns': 'psutil_meminfo',
+        statsd_msgs.append({'ns': 'psutil#meminfo',
                             'key': 'vms', 
                             'value': meminfo.vms,
                             'rate': '',
@@ -206,9 +205,24 @@ class LazyPSUtil(object):
 
         cputimes = self.process.get_cpu_times()
         cpu_pcnt = self.process.get_cpu_percent()
-        return {'cpu_pcnt': cpu_pcnt,
-                'cpu_user': cputimes.user,
-                'cpu_sys': cputimes.system}
+
+        statsd_msgs = []
+        statsd_msgs.append({'ns': 'psutil#cpu',
+                            'key': 'user', 
+                            'value': cputimes.user,
+                            'rate': '',
+                            })
+        statsd_msgs.append({'ns': 'psutil#cpu',
+                            'key': 'sys', 
+                            'value': cputimes.system,
+                            'rate': '',
+                            })
+        statsd_msgs.append({'ns': 'psutil#cpu',
+                            'key': 'pcnt', 
+                            'value': cpu_pcnt,
+                            'rate': '',
+                            })
+        return statsd_msgs
 
     def get_thread_cpuinfo(self):
         """
@@ -218,11 +232,21 @@ class LazyPSUtil(object):
         if not check_osx_perm():
             raise OSXPermissionFailure("OSX requires root for memory info")
 
-        thread_details = {}
+        statsd_msgs = []
+
         for thread in self.process.get_threads():
-            thread_details[thread.id] = {'sys': thread.system_time,
-                    'user': thread.user_time}
-        return thread_details
+            statsd_msgs.append({'ns': 'psutil#thread#%s' % thread.id,
+                                'key': 'sys', 
+                                'value': thread.system_time,
+                                'rate': '',
+                                })
+            statsd_msgs.append({'ns': 'psutil#thread#%s' % thread.id,
+                                'key': 'user', 
+                                'value': thread.user_time,
+                                'rate': '',
+                                })
+        return statsd_msgs
+
 
     def _add_port(self, server_stats, server_port):
         if not server_stats.has_key(server_port):
@@ -285,7 +309,7 @@ class LazyPSUtil(object):
             for status_name, conn_count in status_dict.items():
                 if conn_count == 0:
                     continue
-                statsd_msgs.append({'ns': 'psutil_net_%s' % (addr),
+                statsd_msgs.append({'ns': 'psutil#net#%s' % (addr),
                                     'key': status_name, 
                                     'value': conn_count,
                                     'rate': 1,
