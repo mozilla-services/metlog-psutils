@@ -59,39 +59,50 @@ and percentage of CPU time used is represented as ::
      'rate': '', 
      'value': 0.0 }
 
-Those will then be translated by the Metlog server into the following
-statsd messages ::
+These are formatted into the following statsd messages: ::
 
     psutil.cpu.MyHostName.9973.user|0.12
     psutil.cpu.MyHostName.9973.sys|0.02
     psutil.cpu.MyHostName.9973.pcnt|0.0
 
-
 I/O counters
 ------------
 
-I/O information is represented as ::
+I/O metrics provide bytes read, written and the number of system calls
+used for read and write operations. ::
 
     {'ns': 'psutil.io.MyHostName.9973', 
      'key': 'read_bytes', 
      'rate': '', 
-     'value': 0} 
+     'value': 50} 
 
     {'ns': 'psutil.io.MyHostName.9973', 
      'key': 'write_bytes', 
      'rate': '', 
-     'value': 0} 
+     'value': 200} 
 
     {'ns': 'psutil.io.MyHostName.9973', 
      'key': 'read_count', 
      'rate': '', 
      'value': 3115} 
+
     {'ns': 'psutil.io.MyHostName.9973', 
      'key': 'write_count', 
      'rate': '', 
      'value': 5434} 
 
-Memory data is represented with ::
+This will then get serialized into a statsd message in form of: ::
+
+    psutil.io.MyHostName.9973.read_bytes|50
+    psutil.io.MyHostName.9973.write_bytes|200
+    psutil.io.MyHostName.9973.write_count|3115
+    psutil.io.MyHostName.9973.write_bytes|5434
+
+Memory Usage
+------------
+
+Memory stats provide percentage of memory used as well as RSS and VMS
+usage. ::
 
     {'ns': 'psutil.meminfo.MyHostName.9973', 
      'key': 'pcnt', 
@@ -108,15 +119,32 @@ Memory data is represented with ::
      'rate': '', 
      'value': 52461568}
 
-Thread level CPU usage adds the thread id as a prefix to the key. 
-You can ::
+This will then get serialized into a statsd message in form of: ::
 
-    {'ns': 'psutil.thread.MyHostName.17177',
+    psutil.meminfo.MyHostName.9973.pcnt|2.193876346582101
+    psutil.meminfo.MyHostName.9973.rss|11415552
+    psutil.meminfo.MyHostName.9973.vms|52461568
+
+Thread level CPU usage
+----------------------
+
+Thread level CPU usage adds the thread id as a prefix to the key. 
+statsd is provided with CPU usage for user space and kernel space in
+seconds.  The key is prefixed with the thread id so that statistics
+per thread per process can be monitored. In the following example, CPU
+stats for thread 17177 are monitored.  ::
+
+    {'ns': 'psutil.thread.MyHostName.9973',
      'key': '17177.sys',
      'rate': '',
      'value': 0.02}
 
-    {'ns': 'psutil.thread.MyHostName.17177',
+    {'ns': 'psutil.thread.MyHostName.9973',
      'key': '17177.user',
      'rate': '',
      'value': 0.13}
+
+This will then get serialized into a statsd message in form of: ::
+
+    psutil.thread.MyHostName.9973.17177.sys|0.02
+    psutil.thread.MyHostName.9973.17177.user|0.13
