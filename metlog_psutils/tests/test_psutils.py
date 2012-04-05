@@ -16,6 +16,7 @@ We are initially interested in :
     * memory utilization.
 """
 
+from pprint import pprint
 from metlog.client import MetlogClient
 from metlog_psutils.psutil_plugin import check_osx_perm
 from metlog_psutils.psutil_plugin import config_plugin
@@ -65,6 +66,7 @@ class TestProcessLogs(TestCase):
 
         details = process_details(net=True,
                                   server_addr=['%s:%s' % (HOST, PORT)])
+        pprint(details)
         eq_(len(details['net']), 1)
 
         # Start the client up just so that the server will die gracefully
@@ -75,6 +77,7 @@ class TestProcessLogs(TestCase):
         if not check_osx_perm():
             self.skipTest("OSX needs root")
         detail = process_details(cpu=True)
+        pprint(detail)
 
         found_pcnt= False
         found_sys= False
@@ -92,6 +95,7 @@ class TestProcessLogs(TestCase):
         if not check_osx_perm():
             self.skipTest("OSX needs root")
         detail = process_details(threads=True)
+        pprint(detail)
 
         msgs = [statsd for statsd in detail['threads'] \
                 if statsd['key'] in ('sys', 'user')]
@@ -108,6 +112,7 @@ class TestProcessLogs(TestCase):
             self.skipTest("No IO counter support on this platform")
 
         detail = process_details(io=True)
+        pprint(detail)
 
         found_rb = False
         found_wb = False
@@ -143,6 +148,7 @@ class TestProcessLogs(TestCase):
         found_rss = False
         found_vms = False
         detail = process_details(mem=True)
+        pprint(detail)
         for statsd in detail['mem']:
             eq_(len(statsd), 4)
             assert statsd['ns'] == 'psutil.meminfo'

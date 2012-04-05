@@ -51,6 +51,8 @@ class LazyPSUtil(object):
                              server sockets. Defaults None.
         """
         self.pid = pid
+        self.host = socket.gethostname().replace('.', '_')
+
         self._process = None
         if server_addr is None:
             server_addr = []
@@ -138,24 +140,25 @@ class LazyPSUtil(object):
         io = self.process.get_io_counters()
 
         statsd_msgs = []
-        statsd_msgs.append({'ns': 'psutil.io.count',
+        ns = 'psutil.io.%s.%s' % (self.host, self.pid),
+        statsd_msgs.append({'ns': ns,
                             'key': 'read_bytes', 
                             'value': io.read_bytes,
                             'rate': '',
                             })
-        statsd_msgs.append({'ns': 'psutil.io.count',
+        statsd_msgs.append({'ns': ns,
                             'key': 'write_bytes', 
                             'value': io.write_bytes,
                             'rate': '',
                             })
-        statsd_msgs.append({'ns': 'psutil.iocount',
+        statsd_msgs.append({'ns': ns,
                             'key': 'read_count', 
                             'value': io.read_count,
                             'rate': '',
                             })
-        statsd_msgs.append({'ns': 'psutil.iocount',
+        statsd_msgs.append({'ns': ns,
                             'key': 'write_count', 
-                            'value': io.read_count,
+                            'value': io.write_count,
                             'rate': '',
                             })
 
@@ -174,17 +177,18 @@ class LazyPSUtil(object):
 
         meminfo = self.process.get_memory_info()
         statsd_msgs = []
-        statsd_msgs.append({'ns': 'psutil.meminfo',
+        ns = 'psutil.meminfo.%s.%s' % (self.host, self.pid)
+        statsd_msgs.append({'ns': ns,
                             'key': 'pcnt', 
                             'value': self.process.get_memory_percent(),
                             'rate': '',
                             })
-        statsd_msgs.append({'ns': 'psutil.meminfo',
+        statsd_msgs.append({'ns': ns,
                             'key': 'rss', 
                             'value': meminfo.rss,
                             'rate': '',
                             })
-        statsd_msgs.append({'ns': 'psutil.meminfo',
+        statsd_msgs.append({'ns': ns,
                             'key': 'vms', 
                             'value': meminfo.vms,
                             'rate': '',
@@ -207,17 +211,19 @@ class LazyPSUtil(object):
         cpu_pcnt = self.process.get_cpu_percent()
 
         statsd_msgs = []
-        statsd_msgs.append({'ns': 'psutil.cpu',
+
+        ns = 'psutil.cpu.%s.%s' % (self.host, self.pid),
+        statsd_msgs.append({'ns': ns,
                             'key': 'user', 
                             'value': cputimes.user,
                             'rate': '',
                             })
-        statsd_msgs.append({'ns': 'psutil.cpu',
+        statsd_msgs.append({'ns': ns,
                             'key': 'sys', 
                             'value': cputimes.system,
                             'rate': '',
                             })
-        statsd_msgs.append({'ns': 'psutil.cpu',
+        statsd_msgs.append({'ns': ns,
                             'key': 'pcnt', 
                             'value': cpu_pcnt,
                             'rate': '',
@@ -235,13 +241,15 @@ class LazyPSUtil(object):
         statsd_msgs = []
 
         for thread in self.process.get_threads():
-            statsd_msgs.append({'ns': 'psutil.thread.%s' % thread.id,
-                                'key': 'sys', 
+            ns = 'psutil.thread.%s.%s' % (self.host, self.pid)
+
+            statsd_msgs.append({'ns': ns,
+                                'key': '%s.sys' % thread.id,
                                 'value': thread.system_time,
                                 'rate': '',
                                 })
-            statsd_msgs.append({'ns': 'psutil.thread.%s' % thread.id,
-                                'key': 'user', 
+            statsd_msgs.append({'ns': ns,
+                                'key': '%s.user' % thread.id, 
                                 'value': thread.user_time,
                                 'rate': '',
                                 })
@@ -303,8 +311,10 @@ class LazyPSUtil(object):
             for status_name, conn_count in status_dict.items():
                 if conn_count == 0:
                     continue
-                statsd_msgs.append({'ns': 'psutil.net.%s' % addr.replace(".", '_'),
-                                    'key': status_name, 
+                ns = 'psutil.net.%s.%s' % (self.host, self.pid)
+                key = "%s.%s" % (addr.replace(".", '_'), status_name),
+                statsd_msgs.append({'ns': ns,
+                                    'key': key,
                                     'value': conn_count,
                                     'rate': 1,
                                     })
