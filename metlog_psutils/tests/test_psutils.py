@@ -66,7 +66,6 @@ class TestProcessLogs(TestCase):
 
         details = process_details(net=True,
                                   server_addr=['%s:%s' % (HOST, PORT)])
-        pprint(details)
         eq_(len(details['net']), 1)
 
         # Start the client up just so that the server will die gracefully
@@ -77,7 +76,6 @@ class TestProcessLogs(TestCase):
         if not check_osx_perm():
             self.skipTest("OSX needs root")
         detail = process_details(cpu=True)
-        pprint(detail)
 
         found_pcnt= False
         found_sys= False
@@ -95,41 +93,30 @@ class TestProcessLogs(TestCase):
         if not check_osx_perm():
             self.skipTest("OSX needs root")
         detail = process_details(threads=True)
-        pprint(detail)
 
-        msgs = [statsd for statsd in detail['threads'] \
-                if statsd['key'] in ('sys', 'user')]
+        msgs = detail['threads']
 
         assert len(msgs) > 0
-        for k, g in itertools.groupby(msgs, lambda x: x['ns']):
+        for k, g in itertools.groupby(msgs,\
+                lambda x: x['ns']+'.'+x['key'].split(".")[0]):
             g_list = list(g)
             eq_(len(g_list), 2)
-            assert 'sys' in [f['key'] for f in g_list]
-            assert 'user' in [f['key'] for f in g_list]
+            eq_(1, len([f['key'] for f in g_list if
+                f['key'].endswith('.sys')]))
+            eq_(1, len([f['key'] for f in g_list if
+                f['key'].endswith('.user')]))
 
     def test_io_counters(self):
         if not supports_iocounters():
             self.skipTest("No IO counter support on this platform")
 
         detail = process_details(io=True)
-        pprint(detail)
 
         found_rb = False
         found_wb = False
         found_rc = False
         found_wc = False
         for statsd in detail['io']:
-            # Check the structure
-            assert len(statsd) == 4
-            assert 'key' in statsd
-            assert isinstance(statsd['key'], basestring)
-            assert 'ns' in statsd
-            assert isinstance(statsd['ns'], basestring)
-            assert 'value' in statsd
-            assert isinstance(statsd['value'], type(1))
-            assert 'rate' in statsd
-            eq_(statsd['rate'], '')
-
             if statsd['key'] == 'read_bytes':
                 found_rb = True
             if statsd['key'] == 'write_bytes':
@@ -148,17 +135,9 @@ class TestProcessLogs(TestCase):
         found_rss = False
         found_vms = False
         detail = process_details(mem=True)
-        pprint(detail)
         for statsd in detail['mem']:
             eq_(len(statsd), 4)
-            assert statsd['ns'] == 'psutil.meminfo'
-            assert 'key' in statsd
-            assert isinstance(statsd['key'], basestring)
-            assert 'value' in statsd
-            assert isinstance(statsd['value'], float) or isinstance(statsd['value'], int)
-            assert 'rate' in statsd
-            eq_(statsd['rate'], '')
-
+            assert statsd['ns'].startswith('psutil.meminfo')
             if statsd['key'] == 'pcnt':
                 found_pcnt = True
             if statsd['key'] == 'rss':
@@ -221,13 +200,10 @@ class TestMetlog(object):
         msgs = list(self.client.sender.msgs)
         eq_(len(msgs), 1)
         msg = json.loads(msgs[0])
-        del msg['timestamp']
-        expected = {u'severity': 6, u'fields': {u'logger':
-            u'psutil.net.127_0_0_1:50017', u'name': u'LISTEN',
-            u'rate': 1}, u'logger': u'', u'type': u'procinfo',
-            u'payload': 1, u'env_version': u'0.8'}
 
-        eq_(expected, msg)
+        assert msg['fields']['logger'].startswith("psutil.net")
+        assert msg['fields']['name'] == '127_0_0_1:50017.LISTEN'
+
         # Start the client up just so that the server will die gracefully
         tc = threading.Thread(target=client_code)
         tc.start()
@@ -280,6 +256,6 @@ def test_plugins_config():
     keys = set([m['fields']['name'] for m in msgs])
     eq_(3, len(keys))
     for m in msgs:
-        eq_(m['fields']['logger'], 'psutil.cpu')
+        assert m['fields']['logger'].startswith('psutil.cpu')
         assert m['fields']['name'] in ('user', 'sys', 'pcnt')
         assert isinstance(m['payload'], float)

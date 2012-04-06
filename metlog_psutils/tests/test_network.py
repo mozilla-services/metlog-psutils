@@ -93,9 +93,9 @@ class TestNetworkLoad(TestCase):
             details = process_details(net=True, server_addr='localhost:50007')
             if details.has_key('net'):
                 for net_details in details['net']:
-                    if net_details['key'] == "ESTABLISHED":
+                    if net_details['key'].endswith("ESTABLISHED"):
                         has_established = net_details
-                    if net_details['key'] == "CLOSE_WAIT":
+                    if net_details['key'].endswith("CLOSE_WAIT"):
                         has_close_wait = net_details
 
             time.sleep(1)

@@ -12,7 +12,6 @@ import os
 import sys
 from subprocess import Popen, PIPE
 import re
-import socket
 
 
 class InvalidPIDError(StandardError):
@@ -140,30 +139,29 @@ class LazyPSUtil(object):
         io = self.process.get_io_counters()
 
         statsd_msgs = []
-        ns = 'psutil.io.%s.%s' % (self.host, self.pid),
+        ns = 'psutil.io.%s.%s' % (self.host, self.pid)
         statsd_msgs.append({'ns': ns,
-                            'key': 'read_bytes', 
+                            'key': 'read_bytes',
                             'value': io.read_bytes,
                             'rate': '',
                             })
         statsd_msgs.append({'ns': ns,
-                            'key': 'write_bytes', 
+                            'key': 'write_bytes',
                             'value': io.write_bytes,
                             'rate': '',
                             })
         statsd_msgs.append({'ns': ns,
-                            'key': 'read_count', 
+                            'key': 'read_count',
                             'value': io.read_count,
                             'rate': '',
                             })
         statsd_msgs.append({'ns': ns,
-                            'key': 'write_count', 
+                            'key': 'write_count',
                             'value': io.write_count,
                             'rate': '',
                             })
 
         return statsd_msgs
-
 
     def get_memory_info(self):
         """
@@ -179,22 +177,21 @@ class LazyPSUtil(object):
         statsd_msgs = []
         ns = 'psutil.meminfo.%s.%s' % (self.host, self.pid)
         statsd_msgs.append({'ns': ns,
-                            'key': 'pcnt', 
+                            'key': 'pcnt',
                             'value': self.process.get_memory_percent(),
                             'rate': '',
                             })
         statsd_msgs.append({'ns': ns,
-                            'key': 'rss', 
+                            'key': 'rss',
                             'value': meminfo.rss,
                             'rate': '',
                             })
         statsd_msgs.append({'ns': ns,
-                            'key': 'vms', 
+                            'key': 'vms',
                             'value': meminfo.vms,
                             'rate': '',
                             })
         return statsd_msgs
-
 
     def get_cpu_info(self):
         """
@@ -212,19 +209,19 @@ class LazyPSUtil(object):
 
         statsd_msgs = []
 
-        ns = 'psutil.cpu.%s.%s' % (self.host, self.pid),
+        ns = 'psutil.cpu.%s.%s' % (self.host, self.pid)
         statsd_msgs.append({'ns': ns,
-                            'key': 'user', 
+                            'key': 'user',
                             'value': cputimes.user,
                             'rate': '',
                             })
         statsd_msgs.append({'ns': ns,
-                            'key': 'sys', 
+                            'key': 'sys',
                             'value': cputimes.system,
                             'rate': '',
                             })
         statsd_msgs.append({'ns': ns,
-                            'key': 'pcnt', 
+                            'key': 'pcnt',
                             'value': cpu_pcnt,
                             'rate': '',
                             })
@@ -249,15 +246,14 @@ class LazyPSUtil(object):
                                 'rate': '',
                                 })
             statsd_msgs.append({'ns': ns,
-                                'key': '%s.user' % thread.id, 
+                                'key': '%s.user' % thread.id,
                                 'value': thread.user_time,
                                 'rate': '',
                                 })
         return statsd_msgs
 
-
     def _add_port(self, server_stats, server_port):
-        if not server_stats.has_key(server_port):
+        if not server_port in server_stats:
             server_stats[server_port] = {
                 "ESTABLISHED": 0,
                 "SYN_SENT": 0,
@@ -296,7 +292,10 @@ class LazyPSUtil(object):
             remote_addr = conn['remote']
 
             if remote_addr == '*:*' and local_addr not in self._server_addr:
-                sys.stderr.write("WARNING: missing a local address for server port in logging module")
+                # TODO: what's the right way of handling configuration
+                # errors from within a plugin?
+                msg = "Missing server (%s) in config" % local_addr
+                sys.stderr.write(msg)
                 self._server_addr.append(local_addr)
                 self._add_port(server_stats, local_addr)
 
@@ -312,7 +311,7 @@ class LazyPSUtil(object):
                 if conn_count == 0:
                     continue
                 ns = 'psutil.net.%s.%s' % (self.host, self.pid)
-                key = "%s.%s" % (addr.replace(".", '_'), status_name),
+                key = "%s.%s" % (addr.replace(".", '_'), status_name)
                 statsd_msgs.append({'ns': ns,
                                     'key': key,
                                     'value': conn_count,
@@ -320,8 +319,8 @@ class LazyPSUtil(object):
                                     })
         return statsd_msgs
 
-    def write_json(self, net=False, io=False, cpu=False, mem=False, threads=False, 
-        output_stdout=True):
+    def write_json(self, net=False, io=False, cpu=False, mem=False,
+            threads=False, output_stdout=True):
         data = {}
 
         if net:
@@ -363,20 +362,23 @@ def process_details(pid=None, net=False, io=False,
         return _inproc_process_details(pid, net, io, cpu, mem,
                 threads, server_addr)
 
+
 def _inproc_process_details(pid=None, net=False, io=False,
                     cpu=False, mem=False, threads=False,
                     server_addr=None):
-    interp = sys.executable
     lp = LazyPSUtil(pid, server_addr)
     data = lp.write_json(net, io, cpu, mem, threads, output_stdout=False)
     return data
+
 
 def _popen_process_details(pid=None, net=False, io=False,
                     cpu=False, mem=False, threads=False,
                     server_addr=None):
     interp = sys.executable
     cmd = ['from metlog_psutils.psutil_plugin import LazyPSUtil',
-           'LazyPSUtil(%(pid)d, %(server_addr)r).write_json(net=%(net)s, io=%(io)s, cpu=%(cpu)s, mem=%(mem)s, threads=%(threads)s)']
+           'LazyPSUtil(%(pid)d, %(server_addr)r).write_json(' +
+           'net=%(net)s, io=%(io)s, cpu=%(cpu)s, ' +
+           'mem=%(mem)s, threads=%(threads)s)']
     cmd = ';'.join(cmd)
     rdict = {'pid': pid,
             'server_addr': server_addr,
@@ -390,6 +392,7 @@ def _popen_process_details(pid=None, net=False, io=False,
     result = proc.communicate()
     stdout, stderr = result[0], result[1]
     return json.loads(stdout)
+
 
 def config_plugin(config):
     """
@@ -427,19 +430,18 @@ def config_plugin(config):
         details = process_details(pid,
                 net and config_net,
                 io and config_io,
-                cpu and config_cpu, 
-                mem and config_mem, 
+                cpu and config_cpu,
+                mem and config_mem,
                 threads and config_threads,
                 server_addr)
 
         # Send all the collected metlog messages over
         for k, msgs in details.items():
             for m in msgs:
-                self.metlog('procinfo', 
+                self.metlog('procinfo',
                         fields={'logger': m['ns'],
                                 'name': m['key'],
                                 'rate': m['rate']},
                         payload=m['value'])
-
 
     return metlog_procinfo
