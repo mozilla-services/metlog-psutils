@@ -33,6 +33,7 @@ import itertools
 import socket
 import threading
 import time
+import subprocess
 
 class TestProcessLogs(TestCase):
 
@@ -88,6 +89,29 @@ class TestProcessLogs(TestCase):
             if statsd['key'] == 'user':
                 found_user = True
         assert found_pcnt and found_sys and found_user
+
+    def test_busy_info(self):
+        if not check_osx_perm():
+            self.skipTest("OSX needs root")
+        found_total = False
+        found_uptime = False
+        found_pcnt = False
+        proc = subprocess.Popen(['python', '-m', 'metlog_psutils.tests.cpuhog.py'])
+        pid = proc.pid
+        time.sleep(2)
+        detail = process_details(pid=pid, busy=True)
+        proc.communicate()
+
+        assert len(detail['busy']) == 3
+        for statsd in detail['busy']:
+            if statsd['key'] == 'total_cpu':
+                found_total = True
+            if statsd['key'] == 'uptime':
+                found_uptime = True
+            if statsd['key'] == 'pcnt':
+                found_pcnt = True
+
+        assert found_total and found_uptime and found_pcnt
 
     def test_thread_cpu_info(self):
         if not check_osx_perm():
@@ -195,7 +219,6 @@ class TestMetlog(object):
             time.sleep(1)
 
         self.client.procinfo(net=True, server_addr='localhost:50017')
-
 
         msgs = list(self.client.sender.msgs)
         eq_(len(msgs), 1)

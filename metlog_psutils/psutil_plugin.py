@@ -5,13 +5,14 @@
 # You can obtain one at http://mozilla.org/MPL/2.0/.
 # ***** END LICENSE BLOCK *****
 
-import psutil
-import socket
+from subprocess import Popen, PIPE
+import datetime
 import json
 import os
-import sys
-from subprocess import Popen, PIPE
+import psutil
 import re
+import socket
+import sys
 
 
 class InvalidPIDError(StandardError):
@@ -127,6 +128,40 @@ class LazyPSUtil(object):
                 'remote': '%s:%s' % (rip, rport),
                 })
         return connections
+
+    def get_busy_stats(self):
+        """
+        Get process busy stats.
+
+        Return 3 statsd messages for total_cpu time in seconds, total
+        uptime in seconds, and the percentage of time the process has been
+        active.
+        """
+        cputimes = self.process.get_cpu_times()
+        total_cputime = (cputimes.user + cputimes.system)
+
+        uptime = (datetime.datetime.now() -
+                datetime.datetime.fromtimestamp(self.process.create_time))
+        uptime = uptime.seconds + uptime.microseconds/1000000
+
+        statsd_msgs = []
+        ns = 'psutil.busy.%s.%s' % (self.host, self.pid)
+        statsd_msgs.append({'ns': ns,
+                            'key': 'total_cpu',
+                            'value': total_cputime,
+                            'rate': '',
+                            })
+        statsd_msgs.append({'ns': ns,
+                            'key': 'uptime',
+                            'value': uptime,
+                            'rate': '',
+                            })
+        statsd_msgs.append({'ns': ns,
+                            'key': 'pcnt',
+                            'value': (total_cputime / uptime),
+                            'rate': '',
+                            })
+        return statsd_msgs
 
     def get_io_counters(self):
         """
@@ -320,7 +355,7 @@ class LazyPSUtil(object):
         return statsd_msgs
 
     def write_json(self, net=False, io=False, cpu=False, mem=False,
-            threads=False, output_stdout=True):
+            threads=False, busy=False, output_stdout=True):
         data = {}
 
         if net:
@@ -331,6 +366,9 @@ class LazyPSUtil(object):
 
         if cpu:
             data['cpu'] = self.get_cpu_info()
+
+        if busy:
+            data['busy'] = self.get_busy_stats()
 
         if mem:
             data['mem'] = self.get_memory_info()
@@ -347,38 +385,46 @@ class LazyPSUtil(object):
 
 def process_details(pid=None, net=False, io=False,
                     cpu=False, mem=False, threads=False,
-                    server_addr=None):
-    """
-    psutils doesn't work on it's own process.  Run psutils through a subprocess
-    so that we don't have to deal with the process issues
-    """
+                    busy=False, server_addr=None):
     if pid is None:
         pid = os.getpid()
 
     if 'darwin' in sys.platform:
-        return _popen_process_details(pid, net, io, cpu, mem, threads,
-                server_addr)
+        return _popen_process_details(pid, net,
+                io, cpu,
+                mem, threads,
+                busy, server_addr)
     else:
-        return _inproc_process_details(pid, net, io, cpu, mem,
-                threads, server_addr)
+        return _inproc_process_details(pid, net,
+                io, cpu,
+                mem, threads,
+                busy, server_addr)
 
 
 def _inproc_process_details(pid=None, net=False, io=False,
                     cpu=False, mem=False, threads=False,
+                    busy=False,
                     server_addr=None):
     lp = LazyPSUtil(pid, server_addr)
-    data = lp.write_json(net, io, cpu, mem, threads, output_stdout=False)
+    data = lp.write_json(net=net, io=io, cpu=cpu, mem=mem,
+            threads=threads, busy=busy, output_stdout=False)
     return data
 
 
 def _popen_process_details(pid=None, net=False, io=False,
                     cpu=False, mem=False, threads=False,
+                    busy=False,
                     server_addr=None):
+    """
+    psutils doesn't work on it's own process under OSX.  Run psutils
+    through a subprocess so that we don't have to deal with the
+    process issues
+    """
     interp = sys.executable
     cmd = ['from metlog_psutils.psutil_plugin import LazyPSUtil',
            'LazyPSUtil(%(pid)d, %(server_addr)r).write_json(' +
            'net=%(net)s, io=%(io)s, cpu=%(cpu)s, ' +
-           'mem=%(mem)s, threads=%(threads)s)']
+           'busy=%(busy)s, mem=%(mem)s, threads=%(threads)s)']
     cmd = ';'.join(cmd)
     rdict = {'pid': pid,
             'server_addr': server_addr,
@@ -386,6 +432,7 @@ def _popen_process_details(pid=None, net=False, io=False,
             'io': int(io),
             'cpu': int(cpu),
             'mem': int(mem),
+            'busy': int(busy),
             'threads': int(threads)}
     cmd = cmd % rdict
     proc = Popen([interp, '-c', cmd], stdout=PIPE, stderr=PIPE)
@@ -404,6 +451,7 @@ def config_plugin(config):
     config_cpu = config.pop('cpu', False)
     config_mem = config.pop('mem', False)
     config_threads = config.pop('threads', False)
+    config_busy = config.pop('busy', False)
     default_server_addr = config.pop('server_addr', None)
 
     if config:
@@ -411,7 +459,7 @@ def config_plugin(config):
 
     def metlog_procinfo(self, pid=None, net=False, io=False,
             cpu=False, mem=False, threads=False,
-            server_addr=default_server_addr):
+            busy=False, server_addr=default_server_addr):
         '''
         This is a metlog extension method to place process data into the metlog
         fields dictionary
@@ -420,7 +468,8 @@ def config_plugin(config):
                 (io and config_io) or
                 (cpu and config_cpu) or
                 (mem and config_mem) or
-                (threads and config_threads)):
+                (threads and config_threads) or
+                (busy and config_busy)):
             # Nothing is going to be logged - stop right now
             return
 
@@ -433,6 +482,7 @@ def config_plugin(config):
                 cpu and config_cpu,
                 mem and config_mem,
                 threads and config_threads,
+                busy and config_busy,
                 server_addr)
 
         # Send all the collected metlog messages over
