@@ -27,6 +27,14 @@ Currently supported details options are:
 Usage
 =====
 
+Obtaining a client can be done in multiple ways, please refer to the
+metlog documentation for complete details.
+
+That said, if you are impatient you can obtain a client using
+`get_client`.  We strongly suggest you do not do this though. ::
+
+    from metlog.holder import get_client
+
 Logging your process details involves telling the plugin which details
 you would like to log.  For each type of detail you would like to log,
 you must *explicitly* tell the logger that you would like that
@@ -36,8 +44,8 @@ through the configuration file.
 Using the above example, the following snippet will log network
 details. ::
 
-    from metlog.decorators.base import CLIENT_WRAPPER
-    client = CLIENT_WRAPPER.client
+    from metlog.holder import get_client
+    client = get_client('metlog_psutil')
     client.procinfo(net=True)
 
 The call to procinfo will send network details to the backend
