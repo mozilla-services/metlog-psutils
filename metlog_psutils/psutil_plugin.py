@@ -4,6 +4,7 @@
 # file,
 # You can obtain one at http://mozilla.org/MPL/2.0/.
 # ***** END LICENSE BLOCK *****
+METLOG_METHOD_NAME = 'procinfo'
 
 from subprocess import Popen, PIPE
 import datetime
@@ -493,5 +494,6 @@ def config_plugin(config):
                                 'name': m['key'],
                                 'rate': m['rate']},
                         payload=m['value'])
+    metlog_procinfo.metlog_name = 'procinfo'
 
     return metlog_procinfo
