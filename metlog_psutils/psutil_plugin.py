@@ -6,7 +6,6 @@
 # ***** END LICENSE BLOCK *****
 METLOG_METHOD_NAME = 'procinfo'
 
-from subprocess import Popen, PIPE
 import datetime
 import json
 import os
@@ -68,21 +67,10 @@ class LazyPSUtil(object):
 
         self._server_addr = server_addr
 
-        # Delete any methods that we don't support on the current platform
-        if not supports_iocounters():
-            del self.__class__.get_io_counters
-
-        if not check_osx_perm():
-            del self.__class__.get_cpu_info
-            del self.__class__.get_memory_info
-            del self.__class__.get_thread_cpuinfo
-
     @property
     def process(self):
         if self._process is None:
             self._process = psutil.Process(self.pid)
-            if 'darwin' in sys.platform and os.getpid() == self.pid:
-                raise InvalidPIDError("Can't run process inspection on itself")
         return self._process
 
     def get_connections(self):
@@ -143,7 +131,7 @@ class LazyPSUtil(object):
 
         uptime = (datetime.datetime.now() -
                 datetime.datetime.fromtimestamp(self.process.create_time))
-        uptime = uptime.seconds + uptime.microseconds/1000000
+        uptime = uptime.seconds + uptime.microseconds / 1000000
 
         statsd_msgs = []
         ns = 'psutil.busy.%s.%s' % (self.host, self.pid)
@@ -204,11 +192,6 @@ class LazyPSUtil(object):
         Return the percentage of physical memory used, RSS and VMS
         memory used
         """
-        # TODO: move this out into the constructor and just delete the
-        # method instead of checking it each time
-        if not check_osx_perm():
-            raise OSXPermissionFailure("OSX requires root for memory info")
-
         meminfo = self.process.get_memory_info()
         statsd_msgs = []
         ns = 'psutil.meminfo.%s.%s' % (self.host, self.pid)
@@ -237,9 +220,6 @@ class LazyPSUtil(object):
 
         Note that this method will *block* for 0.1 seconds.
         """
-        if not check_osx_perm():
-            raise OSXPermissionFailure("OSX requires root for memory info")
-
         cputimes = self.process.get_cpu_times()
         cpu_pcnt = self.process.get_cpu_percent()
 
@@ -268,9 +248,6 @@ class LazyPSUtil(object):
         Return CPU usages in seconds split by system and user on a
         per thread basis.
         """
-        if not check_osx_perm():
-            raise OSXPermissionFailure("OSX requires root for memory info")
-
         statsd_msgs = []
 
         for thread in self.process.get_threads():
@@ -390,16 +367,10 @@ def process_details(pid=None, net=False, io=False,
     if pid is None:
         pid = os.getpid()
 
-    if 'darwin' in sys.platform:
-        return _popen_process_details(pid, net,
-                io, cpu,
-                mem, threads,
-                busy, server_addr)
-    else:
-        return _inproc_process_details(pid, net,
-                io, cpu,
-                mem, threads,
-                busy, server_addr)
+    return _inproc_process_details(pid, net,
+            io, cpu,
+            mem, threads,
+            busy, server_addr)
 
 
 def _inproc_process_details(pid=None, net=False, io=False,
@@ -410,36 +381,6 @@ def _inproc_process_details(pid=None, net=False, io=False,
     data = lp.write_json(net=net, io=io, cpu=cpu, mem=mem,
             threads=threads, busy=busy, output_stdout=False)
     return data
-
-
-def _popen_process_details(pid=None, net=False, io=False,
-                    cpu=False, mem=False, threads=False,
-                    busy=False,
-                    server_addr=None):
-    """
-    psutils doesn't work on it's own process under OSX.  Run psutils
-    through a subprocess so that we don't have to deal with the
-    process issues
-    """
-    interp = sys.executable
-    cmd = ['from metlog_psutils.psutil_plugin import LazyPSUtil',
-           'LazyPSUtil(%(pid)d, %(server_addr)r).write_json(' +
-           'net=%(net)s, io=%(io)s, cpu=%(cpu)s, ' +
-           'busy=%(busy)s, mem=%(mem)s, threads=%(threads)s)']
-    cmd = ';'.join(cmd)
-    rdict = {'pid': pid,
-            'server_addr': server_addr,
-            'net': int(net),
-            'io': int(io),
-            'cpu': int(cpu),
-            'mem': int(mem),
-            'busy': int(busy),
-            'threads': int(threads)}
-    cmd = cmd % rdict
-    proc = Popen([interp, '-c', cmd], stdout=PIPE, stderr=PIPE)
-    result = proc.communicate()
-    stdout, stderr = result[0], result[1]
-    return json.loads(stdout)
 
 
 def config_plugin(config):

@@ -16,15 +16,12 @@ We are initially interested in :
     * memory utilization.
 """
 
-from pprint import pprint
-from metlog.client import MetlogClient
 from metlog_psutils.psutil_plugin import check_osx_perm
-from metlog_psutils.psutil_plugin import config_plugin
+import sys
 from metlog_psutils.psutil_plugin import process_details
 from metlog_psutils.psutil_plugin import supports_iocounters
 from mock import Mock
 from nose.tools import eq_
-from testbase import wait_for_network_shutdown
 from metlog.config import client_from_text_config
 import json
 
@@ -35,52 +32,15 @@ import threading
 import time
 import subprocess
 
+
 class TestProcessLogs(TestCase):
 
-    def test_connections(self):
-        HOST = 'localhost'                 # Symbolic name meaning the local host
-        PORT = 50007              # Arbitrary non-privileged port
-        def echo_serv():
-            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-
-            s.bind((HOST, PORT))
-            s.listen(1)
-
-            conn, addr = s.accept()
-            data = conn.recv(1024)
-            conn.send(data)
-            conn.close()
-            s.close()
-
-        t = threading.Thread(target=echo_serv)
-        t.start()
-        time.sleep(1)
-
-        def client_code():
-            client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            client.connect((HOST, PORT))
-            client.send('Hello, world')
-            data = client.recv(1024)
-            client.close()
-            time.sleep(1)
-
-        details = process_details(net=True,
-                                  server_addr=['%s:%s' % (HOST, PORT)])
-        eq_(len(details['net']), 1)
-
-        # Start the client up just so that the server will die gracefully
-        tc = threading.Thread(target=client_code)
-        tc.start()
-
     def test_cpu_info(self):
-        if not check_osx_perm():
-            self.skipTest("OSX needs root")
         detail = process_details(cpu=True)
 
-        found_pcnt= False
-        found_sys= False
-        found_user= False
+        found_pcnt = False
+        found_sys = False
+        found_user = False
         for statsd in detail['cpu']:
             if statsd['key'] == 'pcnt':
                 found_pcnt = True
@@ -91,14 +51,13 @@ class TestProcessLogs(TestCase):
         assert found_pcnt and found_sys and found_user
 
     def test_busy_info(self):
-        if not check_osx_perm():
-            self.skipTest("OSX needs root")
         found_total = False
         found_uptime = False
         found_pcnt = False
-        proc = subprocess.Popen(['python', '-m', 'metlog_psutils.tests.cpuhog.py'])
+        proc = subprocess.Popen([sys.executable, '-m',
+            'metlog_psutils.tests.cpuhog'])
         pid = proc.pid
-        time.sleep(2)
+        time.sleep(1)
         detail = process_details(pid=pid, busy=True)
         proc.communicate()
 
@@ -114,15 +73,13 @@ class TestProcessLogs(TestCase):
         assert found_total and found_uptime and found_pcnt
 
     def test_thread_cpu_info(self):
-        if not check_osx_perm():
-            self.skipTest("OSX needs root")
         detail = process_details(threads=True)
 
         msgs = detail['threads']
 
         assert len(msgs) > 0
         for k, g in itertools.groupby(msgs,\
-                lambda x: x['ns']+'.'+x['key'].split(".")[0]):
+                lambda x: x['ns'] + '.' + x['key'].split(".")[0]):
             g_list = list(g)
             eq_(len(g_list), 2)
             eq_(1, len([f['key'] for f in g_list if
@@ -152,9 +109,6 @@ class TestProcessLogs(TestCase):
         assert found_wc and found_rc and found_wb and found_rb
 
     def test_meminfo(self):
-        if not check_osx_perm():
-            self.skipTest("OSX needs root")
-
         found_pcnt = False
         found_rss = False
         found_vms = False
@@ -169,9 +123,8 @@ class TestProcessLogs(TestCase):
             if statsd['key'] == 'vms':
                 found_vms = True
 
-    def test_invalid_metlog_arg(self):
-        with self.assertRaises(SyntaxError):
-            plugin = config_plugin({'thread_io':True})
+        assert found_pcnt and found_rss and found_vms
+
 
 class TestMetlog(object):
     logger = 'tests'
@@ -188,11 +141,11 @@ class TestMetlog(object):
         """
         ###
         self.client = client_from_text_config(cfg_txt, 'metlog')
-        wait_for_network_shutdown()
 
     def test_add_procinfo(self):
-        HOST = 'localhost'                 # Symbolic name meaning the local host
-        PORT = 50017              # Arbitrary non-privileged port
+        HOST = 'localhost'         # Symbolic name meaning the local host
+        PORT = 50017               # Arbitrary non-privileged port
+
         def echo_serv():
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -214,7 +167,7 @@ class TestMetlog(object):
             client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             client.connect((HOST, PORT))
             client.send('Hello, world')
-            data = client.recv(1024)
+            client.recv(1024)
             client.close()
             time.sleep(1)
 
@@ -241,19 +194,19 @@ class TestConfiguration(object):
 
     def setUp(self):
         self.mock_sender = Mock()
-        self.client = MetlogClient(self.mock_sender, self.logger)
-        # overwrite the class-wide threadlocal w/ an instance one
-        # so values won't persist btn tests
-        self.client.timer._local = threading.local()
 
-        plugin = config_plugin({'net':False})
-        self.client.add_method('procinfo', plugin)
+        cfg_txt = """
+        [metlog]
+        sender_class = metlog.senders.DebugCaptureSender
 
-        wait_for_network_shutdown()
+        [metlog_plugin_psutil]
+        provider=metlog_psutils.psutil_plugin:config_plugin
+        """
+        self.client = client_from_text_config(cfg_txt, 'metlog')
 
     def test_no_netlogging(self):
         self.client.procinfo(net=True)
-        eq_(0, len(self.client.sender.method_calls))
+        eq_(0, len(self.client.sender.msgs))
 
 
 def test_plugins_config():
@@ -265,8 +218,6 @@ def test_plugins_config():
     provider=metlog_psutils.psutil_plugin:config_plugin
     cpu=True
     """
-    from metlog.config import client_from_text_config
-    import json
 
     client = client_from_text_config(cfg_txt, 'metlog')
     client.procinfo(cpu=True)
