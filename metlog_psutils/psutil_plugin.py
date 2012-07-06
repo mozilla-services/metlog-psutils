@@ -131,14 +131,16 @@ class LazyPSUtil(object):
 
         uptime = (datetime.datetime.now() -
                 datetime.datetime.fromtimestamp(self.process.create_time))
-        uptime = uptime.seconds + uptime.microseconds / 1000000
+        uptime = uptime.seconds + uptime.microseconds / 1000000.0
+        if uptime == 0:
+            uptime = 1 / 1000000.0
 
         statsd_msgs = []
         ns = 'psutil.busy.%s.%s' % (self.host, self.pid)
         statsd_msgs.append({'ns': ns,
                             'key': 'total_cpu',
                             'value': total_cputime,
-                            'rate': '',
+                            'rate': 1,
                             })
         statsd_msgs.append({'ns': ns,
                             'key': 'uptime',
@@ -305,10 +307,6 @@ class LazyPSUtil(object):
             remote_addr = conn['remote']
 
             if remote_addr == '*:*' and local_addr not in self._server_addr:
-                # TODO: what's the right way of handling configuration
-                # errors from within a plugin?
-                msg = "Missing server (%s) in config" % local_addr
-                sys.stderr.write(msg)
                 self._server_addr.append(local_addr)
                 self._add_port(server_stats, local_addr)
 
@@ -367,16 +365,6 @@ def process_details(pid=None, net=False, io=False,
     if pid is None:
         pid = os.getpid()
 
-    return _inproc_process_details(pid, net,
-            io, cpu,
-            mem, threads,
-            busy, server_addr)
-
-
-def _inproc_process_details(pid=None, net=False, io=False,
-                    cpu=False, mem=False, threads=False,
-                    busy=False,
-                    server_addr=None):
     lp = LazyPSUtil(pid, server_addr)
     data = lp.write_json(net=net, io=io, cpu=cpu, mem=mem,
             threads=threads, busy=busy, output_stdout=False)
@@ -388,44 +376,25 @@ def config_plugin(config):
     Configure the metlog plugin prior to binding it to the
     metlog client.
     """
-    config_net = config.pop('net', False)
-    config_io = config.pop('io', False)
-    config_cpu = config.pop('cpu', False)
-    config_mem = config.pop('mem', False)
-    config_threads = config.pop('threads', False)
-    config_busy = config.pop('busy', False)
-    default_server_addr = config.pop('server_addr', None)
-
     if config:
         raise SyntaxError('Invalid arguments: %s' % str(config))
 
     def metlog_procinfo(self, pid=None, net=False, io=False,
             cpu=False, mem=False, threads=False,
-            busy=False, server_addr=default_server_addr):
+            busy=False, server_addr=[]):
         '''
         This is a metlog extension method to place process data into the metlog
         fields dictionary
         '''
-        if not ((net and config_net) or
-                (io and config_io) or
-                (cpu and config_cpu) or
-                (mem and config_mem) or
-                (threads and config_threads) or
-                (busy and config_busy)):
+        if not (net or io or cpu or mem or threads or busy):
             # Nothing is going to be logged - stop right now
             return
 
         if pid is None:
             pid = os.getpid()
 
-        details = process_details(pid,
-                net and config_net,
-                io and config_io,
-                cpu and config_cpu,
-                mem and config_mem,
-                threads and config_threads,
-                busy and config_busy,
-                server_addr)
+        details = process_details(pid, net, io, cpu, mem, threads,
+                busy, server_addr)
 
         # Send all the collected metlog messages over
         for k, msgs in details.items():
