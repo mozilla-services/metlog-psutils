@@ -17,8 +17,8 @@ We are initially interested in :
 """
 
 from metlog.config import client_from_text_config
-from testbase import wait_for_network_shutdown
 from unittest2 import TestCase
+from nose.tools import eq_
 import json
 import socket
 import threading
@@ -40,7 +40,21 @@ class TestNetworkLoad(TestCase):
         self.HOST = 'localhost'        # Symbolic name meaning the local host
         self.PORT = 50007              # Arbitrary non-privileged port
         self.MAX_CONNECTIONS = 10
-        wait_for_network_shutdown()
+        self.wait_for_network_shutdown()
+
+    def tearDown(self):
+        self.wait_for_network_shutdown()
+
+    def wait_for_network_shutdown(self):
+        while True:
+            self.client.sender.msgs.clear()
+            self.client.procinfo(net=True)
+            if len(list(self.client.sender.msgs)) > 0:
+                time.sleep(1)
+                print "Not all networks connections are closed...  waiting"
+            else:
+                print "Connections all closed - running testcase!"
+                break
 
     def client_code(self):
         # Start the client up just so that the server will die gracefully
@@ -115,40 +129,76 @@ class TestNetworkLoad(TestCase):
         assert has_close_wait and has_established
 
 
-###
-###     def test_connections(self):
-###         HOST = 'localhost'
-###         PORT = 50007
-###         def echo_serv():
-###             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-###             s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-###
-###             s.bind((HOST, PORT))
-###             s.listen(1)
-###
-###             conn, addr = s.accept()
-###             data = conn.recv(1024)
-###             conn.send(data)
-###             conn.close()
-###             s.close()
-###
-###         t = threading.Thread(target=echo_serv)
-###         t.start()
-###         time.sleep(1)
-###
-###         def client_code():
-###             client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-###             client.connect((HOST, PORT))
-###             client.send('Hello, world')
-###             data = client.recv(1024)
-###             client.close()
-###             time.sleep(1)
-###
-###         details = process_details(net=True,
-###                                   server_addr=['%s:%s' % (HOST, PORT)])
-###         eq_(len(details['net']), 1)
-###
-###         # Start the client up just so that the server will die gracefully
-###         tc = threading.Thread(target=client_code)
-###         tc.start()
-###
+class TestNetworkConnections(TestCase):
+    def setUp(self):
+        cfg_txt = """
+        [metlog]
+        sender_class = metlog.senders.DebugCaptureSender
+
+        [metlog_plugin_procinfo]
+        provider=metlog_psutils.psutil_plugin:config_plugin
+        """
+        ###
+        self.client = client_from_text_config(cfg_txt, 'metlog')
+
+        self.HOST = 'localhost'        # Symbolic name meaning the local host
+        self.PORT = 50007              # Arbitrary non-privileged port
+        self.MAX_CONNECTIONS = 10
+        self.wait_for_network_shutdown()
+
+    def tearDown(self):
+        self.wait_for_network_shutdown()
+
+    def wait_for_network_shutdown(self):
+        while True:
+            self.client.sender.msgs.clear()
+            self.client.procinfo(net=True)
+            if len(list(self.client.sender.msgs)) > 0:
+                time.sleep(1)
+                print "Not all networks connections are closed...  waiting"
+            else:
+                print "Connections all closed - running testcase!"
+                break
+
+    def test_connections(self):
+        def echo_serv():
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            s.bind((self.HOST, self.PORT))
+            s.listen(1)
+            conn, addr = s.accept()
+            data = conn.recv(1024)
+            conn.send(data)
+            conn.close()
+            s.close()
+
+        t = threading.Thread(target=echo_serv)
+        t.start()
+        time.sleep(1)
+
+        self.client.procinfo(net=True)
+        details = self.client.sender.msgs
+        eq_(len(details), 1)
+
+        # Start the client up just so that the server will die gracefully
+        tc = threading.Thread(target=self.client_code)
+        tc.start()
+
+    def client_code(self):
+        # Start the client up just so that the server will die gracefully
+
+        def client_worker():
+            client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            try:
+                client.connect((self.HOST, self.PORT))
+                client.send('Hello, world')
+                client.recv(1024)
+                time.sleep(1)
+            except:
+                pass
+            finally:
+                client.close()
+
+        for i in range(self.MAX_CONNECTIONS):
+            client_thread = threading.Thread(target=client_worker)
+            client_thread.start()
