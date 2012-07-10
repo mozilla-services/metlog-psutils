@@ -42,23 +42,19 @@ class TestPsutil(TestCase):
         self.client.procinfo(cpu=True)
         detail = list(self.client.sender.msgs)
 
-        found_pcnt = False
         found_sys = False
         found_user = False
 
         for statsd in [json.loads(msg) for msg in detail]:
-            if statsd['fields']['name'] == 'pcnt':
-                found_pcnt = statsd['payload']
             if statsd['fields']['name'] == 'sys':
                 found_sys = statsd['payload']
             if statsd['fields']['name'] == 'user':
                 found_user = statsd['payload']
-        assert found_pcnt and found_sys and found_user
+        assert found_sys and found_user
 
     def test_busy_info(self):
         found_total = False
         found_uptime = False
-        found_pcnt = False
         proc = subprocess.Popen([sys.executable, '-m',
             'metlog_psutils.tests.cpuhog'])
         pid = proc.pid
@@ -74,10 +70,8 @@ class TestPsutil(TestCase):
                 found_total = statsd['payload']
             if statsd['fields']['name'] == 'uptime':
                 found_uptime = statsd['payload']
-            if statsd['fields']['name'] == 'pcnt':
-                found_pcnt = statsd['payload']
 
-        assert found_total and found_uptime and found_pcnt
+        assert found_total and found_uptime
 
     def test_thread_cpu_info(self):
         self.client.procinfo(threads=True)
@@ -178,14 +172,12 @@ def test_plugins_config():
     client = client_from_text_config(cfg_txt, 'metlog')
     client.procinfo(cpu=True)
 
-    eq_(len(client.sender.msgs), 3)
+    eq_(len(client.sender.msgs), 2)
     msgs = [json.loads(m) for m in client.sender.msgs]
     for m in msgs:
         del m['timestamp']
 
-    keys = set([m['fields']['name'] for m in msgs])
-    eq_(3, len(keys))
     for m in msgs:
         assert m['fields']['logger'].startswith('psutil.cpu')
-        assert m['fields']['name'] in ('user', 'sys', 'pcnt')
+        assert m['fields']['name'] in ('user', 'sys')
         assert isinstance(m['payload'], float)

@@ -145,12 +145,12 @@ class LazyPSUtil(object):
         statsd_msgs.append({'ns': ns,
                             'key': 'uptime',
                             'value': uptime,
-                            'rate': '',
+                            'rate': '1',
                             })
         statsd_msgs.append({'ns': ns,
                             'key': 'pcnt',
                             'value': (total_cputime / uptime),
-                            'rate': '',
+                            'rate': '1',
                             })
         return statsd_msgs
 
@@ -169,22 +169,22 @@ class LazyPSUtil(object):
         statsd_msgs.append({'ns': ns,
                             'key': 'read_bytes',
                             'value': io.read_bytes,
-                            'rate': '',
+                            'rate': '1',
                             })
         statsd_msgs.append({'ns': ns,
                             'key': 'write_bytes',
                             'value': io.write_bytes,
-                            'rate': '',
+                            'rate': '1',
                             })
         statsd_msgs.append({'ns': ns,
                             'key': 'read_count',
                             'value': io.read_count,
-                            'rate': '',
+                            'rate': '1',
                             })
         statsd_msgs.append({'ns': ns,
                             'key': 'write_count',
                             'value': io.write_count,
-                            'rate': '',
+                            'rate': '1',
                             })
 
         return statsd_msgs
@@ -200,17 +200,17 @@ class LazyPSUtil(object):
         statsd_msgs.append({'ns': ns,
                             'key': 'pcnt',
                             'value': self.process.get_memory_percent(),
-                            'rate': '',
+                            'rate': '1',
                             })
         statsd_msgs.append({'ns': ns,
                             'key': 'rss',
                             'value': meminfo.rss,
-                            'rate': '',
+                            'rate': '1',
                             })
         statsd_msgs.append({'ns': ns,
                             'key': 'vms',
                             'value': meminfo.vms,
-                            'rate': '',
+                            'rate': '1',
                             })
         return statsd_msgs
 
@@ -223,7 +223,7 @@ class LazyPSUtil(object):
         Note that this method will *block* for 0.1 seconds.
         """
         cputimes = self.process.get_cpu_times()
-        cpu_pcnt = self.process.get_cpu_percent()
+        #cpu_pcnt = self.process.get_cpu_percent()
 
         statsd_msgs = []
 
@@ -231,18 +231,18 @@ class LazyPSUtil(object):
         statsd_msgs.append({'ns': ns,
                             'key': 'user',
                             'value': cputimes.user,
-                            'rate': '',
+                            'rate': '1',
                             })
         statsd_msgs.append({'ns': ns,
                             'key': 'sys',
                             'value': cputimes.system,
-                            'rate': '',
+                            'rate': '1',
                             })
-        statsd_msgs.append({'ns': ns,
-                            'key': 'pcnt',
-                            'value': cpu_pcnt,
-                            'rate': '',
-                            })
+        #statsd_msgs.append({'ns': ns,
+        #                    'key': 'pcnt',
+        #                    'value': cpu_pcnt,
+        #                    'rate': '1',
+        #                    })
         return statsd_msgs
 
     def get_thread_cpuinfo(self):
@@ -258,12 +258,12 @@ class LazyPSUtil(object):
             statsd_msgs.append({'ns': ns,
                                 'key': '%s.sys' % thread.id,
                                 'value': thread.system_time,
-                                'rate': '',
+                                'rate': '1',
                                 })
             statsd_msgs.append({'ns': ns,
                                 'key': '%s.user' % thread.id,
                                 'value': thread.user_time,
-                                'rate': '',
+                                'rate': '1',
                                 })
         return statsd_msgs
 
