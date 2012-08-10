@@ -302,7 +302,10 @@ class LazyPSUtil(object):
             self._add_port(server_stats, server_port)
 
         for conn in network_data:
-            status = conn['status']
+            if conn['status'] == '':
+                status = 'UDP'
+            else:
+                status = conn['status']
             local_addr = conn['local']
             remote_addr = conn['remote']
 
