@@ -23,6 +23,8 @@ import json
 import socket
 import threading
 import time
+import os
+from metlog_psutils.psutil_plugin import LazyPSUtil
 
 
 class TestNetworkLoad(TestCase):
@@ -202,3 +204,26 @@ class TestNetworkConnections(TestCase):
         for i in range(self.MAX_CONNECTIONS):
             client_thread = threading.Thread(target=client_worker)
             client_thread.start()
+
+
+class TestUDPSockets(object):
+    def test_check_udp_status(self):
+        pid = os.getpid()
+        psutil = LazyPSUtil(pid, '127.0.0.1:5002')
+        results = psutil.summarize_network([
+            {'status': 'ESTABLISHED',
+             'local': '127.0.0.1:5000',
+             'remote': '127.0.0.1:1000'},
+            {'status': '',
+              'local': '127.0.0.1:2032',
+              'remote': '127.0.0.1:99'},
+            ])
+        assert results == [{'key': '127_0_0_1:99.UDP',
+            'ns': 'psutil.net.Victors-MacBook-Air_local.%s' % pid,
+            'rate': 1,
+            'value': 1},
+            {'key': '127_0_0_1:1000.ESTABLISHED',
+                'ns':
+                'psutil.net.Victors-MacBook-Air_local.%s' % pid,
+                'rate': 1,
+                'value': 1}]
