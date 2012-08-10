@@ -311,10 +311,17 @@ class LazyPSUtil(object):
                 self._add_port(server_stats, local_addr)
 
             if local_addr in self._server_addr:
-                server_stats[local_addr][status] += 1
+                if status not in server_stats[local_addr]:
+                    server_stats[local_addr][status] = 1
+                else:
+                    server_stats[local_addr][status] += 1
             else:
                 self._add_port(server_stats, remote_addr)
-                server_stats[remote_addr][status] += 1
+
+                if status not in server_stats[remote_addr]:
+                    server_stats[remote_addr][status] = 1
+                else:
+                    server_stats[remote_addr][status] += 1
 
         statsd_msgs = []
         for addr, status_dict in server_stats.items():
